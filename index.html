@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08111f">
+  <meta name="description" content="Math notes and quick formula evaluator">
+  <title>Math Study Notes & Calculator</title>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <style>
+    :root{color-scheme:dark;--bg:#07101d;--panel:#101d2e;--line:#223349;--text:#eff6ff;--muted:#91a6bb;--violet:#7765f5;--violet2:#aa7dff;--green:#45d4ae;--danger:#f37889}
+    *{box-sizing:border-box}html,body{height:100%;margin:0}body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif}button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{opacity:.42;cursor:not-allowed}a{color:inherit}h1,h2,h3,p{margin-top:0}h1,h2,h3{font-family:system-ui,-apple-system,'Segoe UI',sans-serif}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #b8a4ff;outline-offset:2px}.hidden{display:none!important}
+    .icon{width:19px;height:19px;display:inline-block;flex-shrink:0}.svg-icon{display:inline-flex;align-items:center;justify-content:center}
+    .app-background{min-height:100dvh;background:radial-gradient(ellipse at 20% 0%,#142741 0%,transparent 42%),#08111f}
+    .notes-wrap{max-width:830px;margin:auto;padding:28px 18px 70px}.notes-top{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #273a50;padding:12px 0 21px}.notes-top h1{font-size:clamp(22px,5vw,29px);margin-bottom:2px}.notes-kicker{font-size:12px;color:#8299b2;margin:0}.notes-logo{display:flex;align-items:center;gap:12px}.logo-square{display:grid;place-items:center;width:48px;height:48px;background:#203b59;border:1px solid #385878;color:#86c6ff;border-radius:14px}.version{border:1px solid #33465a;padding:5px 10px;border-radius:30px;font-size:12px;color:#9bb3cc}.note-card{background:#111f30;border:1px solid #24374b;border-radius:22px;margin-top:22px;padding:23px;box-shadow:0 14px 34px #0002}.note-card h2{font-size:17px;margin:0 0 12px}.note-card p{color:#a6b7ca}.formula-box{border:1px solid #233f58;background:#091729;border-radius:13px;padding:18px;color:#9cc9ff;font:13px/2 ui-monospace,Consolas,monospace}.calc-display{min-height:65px;background:#071526;border:1px solid #2b4055;color:#65efb8;border-radius:14px;margin:13px 0 16px;padding:10px 16px;font:30px/1.4 ui-monospace,Consolas,monospace;white-space:nowrap;overflow:auto;text-align:right}.calc-keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.calc-key{background:#1c2d42;border:1px solid #2d4258;border-radius:13px;color:#eef4fc;padding:16px 0;font-size:17px;font-weight:700}.calc-key:active{transform:scale(.97)}.calc-key.op{color:#ffc67f}.calc-key.equal{background:#248f74;border-color:#248f74}.calc-key.clear{color:#ff9aaf}.hint-line{font-size:12px;color:#7e97af;margin-top:15px}
+    .app-screen{position:fixed;inset:0;z-index:10;background:var(--bg)}.auth-overlay{display:grid;place-items:center;padding:16px;overflow:auto}.auth-card{width:min(100%,430px);border:1px solid #30435c;border-radius:24px;background:#112036;padding:26px;box-shadow:0 30px 80px #0008}.auth-card h2{font-size:24px;margin:13px 0 6px}.auth-card p{color:#9caec5;font-size:13px}.auth-card input{width:100%;background:#081728;border:1px solid #32425b;border-radius:12px;color:#fff;padding:13px 14px;margin:8px 0}.auth-actions{display:flex;gap:9px;margin-top:14px}.primary-btn{background:linear-gradient(110deg,#6d5ded,#9873ef);color:#fff;border:0;padding:12px 15px;border-radius:13px;font-weight:700}.secondary-btn{background:#25364d;border:1px solid #3a4c62;color:#d4e0f1;padding:11px 13px;border-radius:12px}.auth-error{min-height:18px;color:#ffa2b0!important;margin:9px 0 0!important}
+    .chat-shell{height:100dvh;max-width:1080px;margin:auto;display:flex;flex-direction:column;background:#0d1727;border-left:1px solid #1c2c41;border-right:1px solid #1c2c41}.chat-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:linear-gradient(90deg,#15243b,#171d35);border-bottom:1px solid #283951;z-index:2}.chat-identity{display:flex;align-items:center;gap:10px;min-width:0}.avatar{width:41px;height:41px;border-radius:14px;background:linear-gradient(135deg,#785af1,#d17ad6);display:grid;place-items:center;font-size:21px;flex-shrink:0}.chat-identity h2{font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chat-identity p{margin:1px 0 0;color:#8fa1ba;font-size:12px}.status-dot{width:7px;height:7px;background:#8591a1;border-radius:50%;display:inline-block;margin-right:5px}.status-dot.online{background:#4ddeaa;box-shadow:0 0 7px #40d1ab}.header-buttons{display:flex;align-items:center;gap:7px}.icon-btn{border:1px solid #354760;color:#dfebff;background:#21324d;display:inline-grid;place-items:center;flex-shrink:0;border-radius:12px;min-width:40px;height:40px;padding:0 9px}.icon-btn:active,.secondary-btn:active,.primary-btn:active{transform:scale(.97)}.icon-btn.call{background:#1a4b4e;border-color:#246965;color:#8bf0ce}.icon-btn.hang{background:#592739;color:#ffb2c0;border-color:#74394d}.icon-btn.borderless{background:transparent;border-color:transparent;min-width:33px;height:32px}.icon-btn:hover{filter:brightness(1.15)}.chat-subbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;border-bottom:1px solid #243249;background:#0c1829;padding:9px 15px;font-size:11px;color:#91a6be}.chat-subbar button{border:0;background:none;color:#af9dff;font-size:11px;font-weight:700}.chat-tools{display:flex;gap:10px;align-items:center;flex-shrink:0}.search-box{background:#14243a;border:1px solid #2d4059;color:white;border-radius:9px;padding:6px 9px;font-size:12px;width:125px;max-width:26vw}
+    .messages{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:22px 20px;display:flex;flex-direction:column;gap:13px;min-height:0;background:radial-gradient(ellipse at top right,#20214155,transparent 54%),#0c1626}.empty-state{margin:auto;text-align:center;color:#8096b0;max-width:270px;font-size:13px}.empty-state .heart{font-size:34px;margin-bottom:8px}.msg-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px}.msg-row.mine{align-items:flex-end}.msg-bubble{padding:11px 14px;border-radius:16px;max-width:min(78%,500px);background:#22324b;border:1px solid #34465c;overflow:hidden;overflow-wrap:anywhere}.msg-row.mine .msg-bubble{background:#564aca;border-color:#665ae2;border-bottom-right-radius:5px}.msg-row:not(.mine) .msg-bubble{border-bottom-left-radius:5px}.msg-text{white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.48}.msg-media{display:block;max-width:100%;max-height:330px;width:auto;height:auto;border-radius:10px;margin:2px 0}.msg-media.video{width:min(100%,440px);background:#000}.msg-media.audio{width:min(100%,310px)}.file-card{display:flex;gap:11px;align-items:center;text-decoration:none;padding:8px 0;min-width:190px;max-width:350px}.file-card strong{font-size:13px;display:block;word-break:break-all}.file-card small{color:#bdc9e3}.file-symbol{width:42px;height:42px;background:#ffffff1c;border-radius:10px;display:grid;place-items:center;font-size:24px;flex-shrink:0}.reply-snippet{border-left:3px solid #f8dbff;background:#ffffff16;border-radius:7px;padding:5px 9px;font-size:12px;color:#e7e5ff;margin-bottom:7px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.msg-meta{display:flex;align-items:center;gap:9px;color:#70849c;font-size:10px}.mini-action{border:0;background:none;color:#90a5be;padding:2px;font-size:10px;cursor:pointer}.msg-row:hover .mini-action{color:#c5d8ed}.typing-line{min-height:22px;font-size:11px;padding:3px 19px;color:#a99cfc;background:#0c1626}.input-area{flex-shrink:0;border-top:1px solid #253852;padding:11px 14px max(12px,env(safe-area-inset-bottom));background:#111f34}.reply-box{display:flex;justify-content:space-between;align-items:center;font-size:12px;border-left:3px solid #a596ff;padding:8px 10px;background:#ffffff10;color:#cfc4ff;margin-bottom:8px;border-radius:7px}.reply-box button{border:0;background:transparent;color:inherit;font-size:19px}.composer{display:flex;align-items:center;gap:8px}.composer textarea{flex:1;min-width:0;max-height:105px;min-height:44px;resize:none;background:#09172a;color:#ecf3fd;border:1px solid #30445e;border-radius:14px;padding:11px 12px;outline:none}.composer textarea:focus{border-color:#897bfa}.composer textarea::placeholder{color:#728aa5}.send-button{background:#7563ef;color:white;border:none;display:grid;place-items:center;border-radius:12px;height:44px;width:44px;flex-shrink:0}.emoji-tray{display:flex;flex-wrap:wrap;gap:5px;border:1px solid #283a52;border-radius:13px;padding:8px;background:#17263e;margin-bottom:9px}.emoji-tray button{background:transparent;border:0;font-size:23px;min-width:37px;min-height:37px}.upload-progress{display:flex;align-items:center;gap:10px;color:#cfc3ff;font-size:12px;margin:0 0 7px}.upload-progress progress{flex:1;height:8px;accent-color:#9b84ff}.toast{position:fixed;z-index:40;left:50%;bottom:21px;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 26px);color:#fff;border:1px solid #4c537c;background:#29304d;padding:12px 16px;border-radius:12px;box-shadow:0 12px 38px #0009;font-size:13px}.call-layer{position:fixed;inset:0;z-index:30;background:#080e1ff2;display:grid;place-items:center;padding:12px}.call-frame{width:min(100%,780px);max-height:96dvh;overflow:auto;background:#141e32;border:1px solid #354363;border-radius:23px;padding:16px;box-shadow:0 18px 80px #0009}.call-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 13px}.call-heading h2{font-size:18px;margin:0}.call-heading p{font-size:12px;color:#9aaed0;margin:2px 0 0}.video-stage{width:100%;position:relative;aspect-ratio:16/10;min-height:240px;max-height:65dvh;background:#050a14;border-radius:14px;overflow:hidden;display:grid;place-items:center}.video-stage video.remote{width:100%;height:100%;object-fit:cover;background:#070f1f}.video-stage video.local{position:absolute;bottom:12px;right:12px;width:28%;height:34%;max-width:180px;border:2px solid #a69cf2;object-fit:cover;background:#18233b;border-radius:12px;transform:scaleX(-1);z-index:1}.video-stage .call-placeholder{position:absolute;color:#b2b8d5;text-align:center;pointer-events:none;max-width:70%;font-size:13px}.video-stage.has-remote .call-placeholder{display:none}.call-controls{display:flex;align-items:center;justify-content:center;gap:12px;padding:16px 4px 4px}.call-control{border:1px solid #4a5675;background:#29344e;color:white;border-radius:50%;width:49px;height:49px;display:grid;place-items:center}.call-control.muted{background:#5c3349}.call-control.red{background:#cf3e65;border-color:#cf3e65}.incoming-card{text-align:center;padding:27px 20px}.incoming-card h2{font-size:24px}.incoming-card p{color:#a6b6cb}.incoming-actions{display:flex;gap:15px;justify-content:center;margin-top:20px}.incoming-actions button{border:0;border-radius:14px;padding:13px 22px;color:white;font-weight:700}.incoming-yes{background:#15946f}.incoming-no{background:#a93451}
+    @media(max-width:560px){.notes-wrap{padding:14px 12px 45px}.note-card{padding:16px;margin-top:14px}.calc-key{padding:12px 0}.chat-header{padding:10px 11px}.chat-identity h2{font-size:14px}.avatar{width:37px;height:37px}.header-buttons{gap:4px}.header-buttons .icon-btn{min-width:34px;height:36px;padding:0 7px}.header-buttons .icon{width:17px;height:17px}.chat-identity{gap:7px}.messages{padding:14px 10px;gap:11px}.msg-bubble{max-width:86%;padding:10px 12px}.input-area{padding:8px 9px max(9px,env(safe-area-inset-bottom))}.composer{gap:5px}.composer .icon-btn{min-width:35px;height:39px;padding:0 6px}.composer textarea{font-size:13px;padding:10px 9px}.send-button{height:40px;width:40px}.chat-subbar{padding:7px 10px}.chat-tools{gap:6px}.search-box{width:102px}.call-frame{padding:12px}.video-stage{aspect-ratio:9/11;min-height:280px}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <!-- DISGUISE: press and hold the title for 2 seconds to reveal the chat. -->
+  <main id="notesMode" class="app-background">
+    <div class="notes-wrap">
+      <header class="notes-top"><div id="titleTrigger" class="notes-logo" style="touch-action:manipulation;user-select:none;-webkit-user-select:none;cursor:pointer" title="Math Study Notes">
+        <span class="logo-square"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5.5C6 4 9 4 12 6c3-2 6-2 9-.5V20c-3-1.5-6-1.5-9 .5-3-2-6-2-9-.5Z"/><path d="M12 6v14.5"/></svg></span><span><h1>Math Study Notes</h1><p class="notes-kicker">Calculus, Linear Algebra & Formulas</p></span>
+      </div><span class="version">v3.0</span></header>
+      <section class="note-card"><h2>Quick Formula Evaluator</h2><div id="calcDisplay" class="calc-display">0</div><div class="calc-keys">
+        <button class="calc-key clear" data-calc="C">C</button><button class="calc-key op" data-calc="(">(</button><button class="calc-key op" data-calc=")">)</button><button class="calc-key op" data-calc="/">÷</button>
+        <button class="calc-key" data-calc="7">7</button><button class="calc-key" data-calc="8">8</button><button class="calc-key" data-calc="9">9</button><button class="calc-key op" data-calc="*">×</button>
+        <button class="calc-key" data-calc="4">4</button><button class="calc-key" data-calc="5">5</button><button class="calc-key" data-calc="6">6</button><button class="calc-key op" data-calc="-">−</button>
+        <button class="calc-key" data-calc="1">1</button><button class="calc-key" data-calc="2">2</button><button class="calc-key" data-calc="3">3</button><button class="calc-key op" data-calc="+">+</button>
+        <button class="calc-key" data-calc="0" style="grid-column:span 2">0</button><button class="calc-key" data-calc=".">.</button><button class="calc-key equal" data-calc="=">=</button>
+      </div><p class="hint-line">Enter an expression and press = to evaluate.</p></section>
+      <article class="note-card"><h2>1. Derivative Rules & Identity Statements</h2><p>The derivative of a function measures the rate at which the function value changes with respect to a change in its input value.</p><div class="formula-box">Power Rule: d/dx (x^n) = n · x^(n−1)<br>Product Rule: d/dx (uv) = u'v + uv'<br>Quotient Rule: d/dx (u/v) = (u'v − uv') / v²<br>Chain Rule: d/dx [f(g(x))] = f'(g(x)) · g'(x)</div></article>
+    </div>
+  </main>
+
+  <section id="authScreen" class="app-screen auth-overlay hidden" aria-label="Sign in">
+    <div class="auth-card"><div class="avatar" style="font-size:24px">✦</div><h2>Sign in</h2><p>This area is for two approved accounts. Use your Firebase email and password. The long-press gesture hides the chat; the account login protects access when Firebase rules are configured.</p>
+      <form id="loginForm"><input id="emailInput" type="email" placeholder="Email address" autocomplete="username" required><input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" required><p id="authError" class="auth-error" role="alert"></p><div class="auth-actions"><button type="submit" id="loginBtn" class="primary-btn" style="flex:1">Sign in securely</button><button type="button" class="secondary-btn" id="authBack">Back</button></div></form>
+    </div>
+  </section>
+
+  <section id="chatMode" class="app-screen hidden" aria-label="Private messages">
+    <div class="chat-shell">
+      <header class="chat-header"><div class="chat-identity"><div class="avatar">💜</div><div style="min-width:0"><h2>Our Space</h2><p><span id="presenceDot" class="status-dot"></span><span id="partnerStatus">Checking connection...</span></p></div></div>
+        <div class="header-buttons"><button id="voiceCallBtn" class="icon-btn call" aria-label="Start voice call" title="Voice call"></button><button id="videoCallBtn" class="icon-btn call" aria-label="Start video call" title="Video call"></button><button id="notifBtn" class="icon-btn" aria-label="Enable notifications" title="Enable notifications"></button><button id="lockBtn" class="icon-btn" aria-label="Lock and return to calculator" title="Lock"></button></div>
+      </header>
+      <div class="chat-subbar"><span><span style="color:#6ce1bd">●</span> Live sync · Chat is not end-to-end encrypted</span><div class="chat-tools"><input id="searchInput" type="search" class="search-box" placeholder="Search messages" aria-label="Search messages"><button id="signOutBtn" title="Sign out account">Sign out</button></div></div>
+      <div id="messagesList" class="messages" role="log" aria-live="polite"><div class="empty-state">Loading conversation...</div></div>
+      <div id="typingLine" class="typing-line" aria-live="polite"></div>
+      <div class="input-area"><div id="uploadProgress" class="upload-progress hidden"><span id="uploadName">Uploading...</span><progress id="uploadBar" max="100" value="0"></progress><button id="cancelUploadBtn" class="icon-btn borderless" title="Cancel upload" aria-label="Cancel upload">×</button></div>
+        <div id="replyBox" class="reply-box hidden"><span id="replyLabel"></span><button id="closeReplyBtn" title="Cancel reply">×</button></div>
+        <div id="emojiTray" class="emoji-tray hidden"><button type="button" data-emoji="❤️">❤️</button><button type="button" data-emoji="🥰">🥰</button><button type="button" data-emoji="😘">😘</button><button type="button" data-emoji="😂">😂</button><button type="button" data-emoji="😍">😍</button><button type="button" data-emoji="💜">💜</button><button type="button" data-emoji="🫶">🫶</button><button type="button" data-emoji="🥹">🥹</button></div>
+        <form class="composer" id="messageForm"><input id="fileInput" class="hidden" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.csv" multiple>
+          <button type="button" id="attachBtn" class="icon-btn" title="Share photos, videos or files" aria-label="Attach files"></button><button type="button" id="recordBtn" class="icon-btn" title="Record voice note" aria-label="Record a voice note"></button><button type="button" id="emojiBtn" class="icon-btn" title="Emojis" aria-label="Emojis"></button>
+          <textarea id="messageInput" rows="1" maxlength="3000" placeholder="Write a little something..." aria-label="Type a message"></textarea><button type="submit" class="send-button" aria-label="Send message" id="sendBtn"></button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section id="callLayer" class="call-layer hidden" aria-label="Call window" role="dialog" aria-modal="true">
+    <div id="incomingCall" class="call-frame incoming-card hidden"><div class="avatar" style="margin:auto;width:68px;height:68px;font-size:32px">💜</div><h2>Incoming call</h2><p id="incomingCallText">Someone is calling...</p><div class="incoming-actions"><button id="declineBtn" class="incoming-no">Decline</button><button id="answerBtn" class="incoming-yes">Answer</button></div></div>
+    <div id="activeCall" class="call-frame hidden"><header class="call-heading"><div><h2 id="callHeading">Connecting...</h2><p id="callDetail">Preparing connection</p></div><div style="font-size:22px">💜</div></header>
+      <div class="video-stage" id="videoStage"><video id="remoteVideo" class="remote" autoplay playsinline></video><p class="call-placeholder" id="callPlaceholder">Waiting for your partner...</p><video id="localVideo" class="local" muted autoplay playsinline></video></div>
+      <div class="call-controls"><button id="muteBtn" class="call-control" aria-label="Mute or unmute microphone" title="Microphone"></button><button id="cameraBtn" class="call-control" aria-label="Toggle camera" title="Camera"></button><button id="hangupBtn" class="call-control red" aria-label="End call" title="End call"></button></div>
+    </div>
+  </section>
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script>
+  window.addEventListener('DOMContentLoaded', () => {
+    'use strict';
+    const $ = (id) => document.getElementById(id);
+    const SVG = {
+      phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.8L7.1 10a16 16 0 0 0 6.9 6.9l1.5-1.9a2 2 0 0 1 1.8-.6l3 .5a2 2 0 0 1 1.7 2Z"/>',
+      video:'<rect x="2" y="5" width="15" height="14" rx="2"/><path d="m17 10 5-3v10l-5-3"/>',
+      bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+      lock:'<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+      clip:'<path d="m21 11.5-8.5 8.5a6 6 0 0 1-8.5-8.5L13 2.5a4 4 0 0 1 5.7 5.7L9.8 17a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
+      mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8"/>',
+      micOff:'<path d="m2 2 20 20M9 9v2a3 3 0 0 0 5.1 2.1M15 9V5a3 3 0 0 0-5.8-1M5 10a7 7 0 0 0 12 5M19 10a7 7 0 0 1-.7 3M12 17v5m-4 0h8"/>',
+      smile:'<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+      send:'<path d="m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13"/>',
+      cameraOff:'<path d="m2 2 20 20M10 5h5a2 2 0 0 1 2 2v3l5-3v10l-2-1M17 17v0a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2"/>',
+      phoneOff:'<path d="M10.7 5 8.6 2.8A2 2 0 0 0 7.1 2h-3a2 2 0 0 0-2 2.2 19.8 19.8 0 0 0 17.7 17.7 2 2 0 0 0 2.2-2v-3a2 2 0 0 0-1.7-2l-3-.5a2 2 0 0 0-1.8.6L14 17a16 16 0 0 1-6.9-6.9L9 8.5a2 2 0 0 0 .6-1.8M2 2l20 20"/>'
+    };
+    function ico(name){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+SVG[name]+'</svg>';}
+    $('voiceCallBtn').innerHTML=ico('phone');$('videoCallBtn').innerHTML=ico('video');$('notifBtn').innerHTML=ico('bell');$('lockBtn').innerHTML=ico('lock');$('attachBtn').innerHTML=ico('clip');$('recordBtn').innerHTML=ico('mic');$('emojiBtn').innerHTML=ico('smile');$('sendBtn').innerHTML=ico('send');$('muteBtn').innerHTML=ico('mic');$('cameraBtn').innerHTML=ico('video');$('hangupBtn').innerHTML=ico('phoneOff');
+    function notify(msg){const n=$('toast');n.textContent=msg;n.classList.remove('hidden');clearTimeout(notify.timer);notify.timer=setTimeout(()=>n.classList.add('hidden'),5200);}
+    function friendlyError(e){let s=String(e&&e.message||e||'Something went wrong');return s.replace(/^Firebase:\s*/,'').replace(/\s*\(auth\/[^)]+\)\.?/,'').slice(0,180);}
+
+    // SECRETCHAT Firebase project — GitHub Pages hosting, Firebase backend.
+    // REQUIRED: After creating Realtime Database, copy its exact URL from
+    // Firebase Console -> Realtime Database -> Data into databaseURL below.
+    // Do not change authDomain to your GitHub domain.
+    const firebaseConfig = {
+      apiKey: "AIzaSyAXzt8QXm_ojqVVSYB8WLClHUfjVTYW7dY",
+      authDomain: "secretchat-a5f36.firebaseapp.com",
+      databaseURL: "https://secretchat-a5f36-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "secretchat-a5f36",
+      storageBucket: "secretchat-a5f36.firebasestorage.app",
+      messagingSenderId: "747278363272",
+      appId: "1:747278363272:web:eda779c812cf80cc90cd3d",
+      measurementId: "G-11BETKN27T"
+    };
+    // Helpful setup check: the URL is not part of the Web app config screenshot.
+    if (!firebaseConfig.databaseURL.startsWith('https://')) {
+      const tip = document.createElement('p');
+      tip.style.cssText = 'padding:12px 16px;margin:16px auto;max-width:830px;border-radius:12px;background:#432b16;color:#ffe6af;border:1px solid #96633b';
+      tip.textContent = 'Firebase setup needed: Open index.html and paste your exact Realtime Database URL into databaseURL before publishing.';
+      $('notesMode').prepend(tip);
+    }
+    let auth,db,storage,chatRef,callRef;
+    try{firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.database();storage=firebase.storage();chatRef=db.ref('messages');callRef=db.ref('calls/active');}
+    catch(e){notify('Firebase failed to load. Check your internet connection.');console.error(e);return;}
+    const oldDeviceId=localStorage.getItem('stealth_user_id');
+    let user=null,unlocked=false,listenerOn=false,partnerUid=null,replyTo=null,uploadTask=null,recording=null,recStream=null,cancelRecord=false,typingTimer=null,lastMessages=[],hasLoadedMessages=false;
+    let messageQuery=null,prevNewestKey='',call=null,pendingIncoming=null,lastIncomingID='',incomingShown=false,callWatcherOn=false,iceListener=null,remoteCandidateQueue=[];
+    let localStream=null,peer=null,remoteStream=null,callLock=false;
+    const ICE_SERVERS=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
+    // For reliable mobile/cross-network calls, add a provider's TURN server here:
+    // ICE_SERVERS.push({urls:'turn:YOUR_TURN_SERVER:3478',username:'YOUR_USERNAME',credential:'YOUR_PASSWORD'});
+    const MAX_FILE_BYTES=100*1024*1024;
+
+    // Mathematical evaluator: only numbers, parentheses and operators; does not use eval().
+    let expression='0';
+    function calcOutput(){ $('calcDisplay').textContent=expression.replaceAll('*','×').replaceAll('/','÷'); }
+    function parseMath(source){const s=source.replace(/\s+/g,'');let i=0;function expr(){let n=term();while(s[i]=='+'||s[i]=='-'){const op=s[i++],v=term();n=op==='+'?n+v:n-v;}return n;}function term(){let n=factor();while(s[i]=='*'||s[i]=='/'){const op=s[i++],v=factor();n=op==='*'?n*v:n/v;}return n;}function factor(){if(s[i]==='+'||s[i]==='-'){const op=s[i++];return(op==='-'?-1:1)*factor();}if(s[i]==='('){i++;const v=expr();if(s[i++]!==')')throw Error('Missing )');return v;}const m=/^(?:\d+(?:\.\d*)?|\.\d+)/.exec(s.slice(i));if(!m)throw Error('Number expected');i+=m[0].length;return Number(m[0]);}const n=expr();if(i!==s.length||!Number.isFinite(n))throw Error('Invalid expression');return Math.round((n+Number.EPSILON)*1e10)/1e10;}
+    document.querySelectorAll('[data-calc]').forEach(b=>b.addEventListener('click',()=>{const value=b.dataset.calc;if(value==='C')expression='0';else if(value==='='){try{expression=String(parseMath(expression));}catch{expression='Error';}}else{if(expression==='Error'||(expression==='0'&&/[0-9(]/.test(value)))expression='';expression+=value;}calcOutput();}));
+    const titleTrigger=$('titleTrigger');let holdTimer=null;
+    function unlock(){if(unlocked)return;unlocked=true;clearTimeout(holdTimer);if(user)openChat();else openLogin();}
+    titleTrigger.addEventListener('pointerdown',e=>{if(e.button!==0)return;clearTimeout(holdTimer);holdTimer=setTimeout(unlock,1900);});
+    ['pointerup','pointercancel','pointerleave','contextmenu'].forEach(name=>titleTrigger.addEventListener(name,e=>{if(name==='contextmenu')e.preventDefault();clearTimeout(holdTimer);}));
+    function openLogin(){ $('notesMode').classList.add('hidden');$('authScreen').classList.remove('hidden');$('chatMode').classList.add('hidden');}
+    function lockChat(){unlocked=false;hideCallsUI();$('notesMode').classList.remove('hidden');$('authScreen').classList.add('hidden');$('chatMode').classList.add('hidden');stopMessageListeners(); if(recording){cancelRecord=true;stopVoiceRecord();} if(call)hangup();}
+    $('lockBtn').addEventListener('click',lockChat);$('authBack').addEventListener('click',lockChat);
+    let lastPanicTap=0;document.querySelector('.chat-identity').addEventListener('touchend',e=>{const now=Date.now();if(now-lastPanicTap<340){e.preventDefault();lockChat();}lastPanicTap=now;});
+    function openChat(){if(!user){openLogin();return;}$('notesMode').classList.add('hidden');$('authScreen').classList.add('hidden');$('chatMode').classList.remove('hidden');unlocked=true;listenMessages();listenStatusAndCalls();updateNotifButton();}
+    $('loginForm').addEventListener('submit',async(e)=>{e.preventDefault();$('authError').textContent='';$('loginBtn').disabled=true;try{await auth.signInWithEmailAndPassword($('emailInput').value.trim(),$('passwordInput').value);$('passwordInput').value='';}catch(err){$('authError').textContent=friendlyError(err);}finally{$('loginBtn').disabled=false;}});
+    $('signOutBtn').addEventListener('click',async()=>{if(!confirm('Sign out of this device?'))return;try{if(presenceRef)await presenceRef.set({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});if(call)await hangup();await auth.signOut();}catch(e){notify(friendlyError(e));}});
+    auth.onAuthStateChanged(async(u)=>{
+      const prev=user;user=u;
+      if(!u){if(call)await hangup();stopMessageListeners();stopPresenceAndCalls();partnerUid=null;$('partnerStatus').textContent='Offline';$('presenceDot').classList.remove('online');if(unlocked)openLogin();return;}
+      if(prev&&prev.uid!==u.uid){stopMessageListeners();stopPresenceAndCalls();}
+      if(unlocked)openChat();
+    });
+
+    function isMine(m){return !!(user&&m.sender===user.uid)||!!(oldDeviceId&&m.sender===oldDeviceId);}
+    function displayTime(m){const d=new Date(m.timestamp||Date.now());return Number.isFinite(d.getTime())?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(m.time||'');}
+    function mediaURL(url){if(typeof url!=='string')return null;try{if(url.startsWith('data:image/')&&url.length<8000000)return url;const u=new URL(url);return u.protocol==='https:'?u.href:null;}catch{return null;}}
+    function msgSummary(m){if(m.text)return m.text.slice(0,70);if(m.fileName)return '📎 '+m.fileName.slice(0,50);return m.image?'📷 Photo':'Attachment';}
+    function renderMessages(){const list=$('messagesList'),needle=$('searchInput').value.trim().toLowerCase();const atEnd=list.scrollHeight-list.scrollTop-list.clientHeight<140;const previousScroll=list.scrollTop;list.replaceChildren();const found=lastMessages.filter(m=>!needle||[m.text,m.fileName,m.type,m.replyText].some(x=>String(x||'').toLowerCase().includes(needle)));
+      if(!found.length){const p=document.createElement('div');p.className='empty-state';p.innerHTML='<div class="heart">💌</div>'+(needle?'No matching messages.':'Your conversation begins here.');list.appendChild(p);return;}
+      const frag=document.createDocumentFragment();
+      for(const m of found){const mine=isMine(m),outer=document.createElement('div');outer.className='msg-row'+(mine?' mine':'');const b=document.createElement('div');b.className='msg-bubble';
+        if(m.replyText){const quoted=document.createElement('div');quoted.className='reply-snippet';quoted.textContent='↪ '+String(m.replyText).slice(0,130);b.appendChild(quoted);}
+        if(m.text){const text=document.createElement('div');text.className='msg-text';text.textContent=m.text;b.appendChild(text);}
+        const url=mediaURL(m.fileUrl||m.image);
+        if(url){let media;if((m.type||'').startsWith('image/')||m.image){media=document.createElement('img');media.className='msg-media';media.loading='lazy';media.alt=m.fileName||'Shared photo';media.src=url;}
+          else if((m.type||'').startsWith('video/')){media=document.createElement('video');media.className='msg-media video';media.controls=true;media.preload='metadata';media.playsInline=true;media.src=url;}
+          else if((m.type||'').startsWith('audio/')){media=document.createElement('audio');media.className='msg-media audio';media.controls=true;media.preload='none';media.src=url;}
+          else{media=document.createElement('a');media.className='file-card';media.href=url;media.target='_blank';media.rel='noopener noreferrer';const fileSymbol=document.createElement('span');fileSymbol.className='file-symbol';fileSymbol.textContent='📄';const details=document.createElement('span');const strong=document.createElement('strong');strong.textContent=m.fileName||'Shared document';const small=document.createElement('small');small.textContent=((m.fileSize||0)/1024/1024).toFixed(1)+' MB · Open / download ↗';details.append(strong,small);media.append(fileSymbol,details);}
+          b.appendChild(media);
+          if(!(m.type||'').startsWith('audio/')&&!(m.type||'').startsWith('video/')&&!(m.type||'').startsWith('image/')&&!m.image&&m.fileName){/* file name is inside card */}
+        }
+        if(m.fileName&&(m.type||'').startsWith('image/')||(m.fileName&&(m.type||'').startsWith('video/'))){const cap=document.createElement('div');cap.style.cssText='font-size:11px;color:#dedcff;margin-top:4px';cap.textContent=m.fileName;b.appendChild(cap);}
+        outer.appendChild(b);const meta=document.createElement('div');meta.className='msg-meta';const tm=document.createElement('span');tm.textContent=displayTime(m);const reply=document.createElement('button');reply.className='mini-action';reply.textContent='↩ Reply';reply.title='Reply';reply.addEventListener('click',()=>selectReply(m));meta.append(tm,reply);
+        if(mine&&m.key&&user&&m.sender===user.uid){const del=document.createElement('button');del.className='mini-action';del.textContent='Delete';del.addEventListener('click',()=>deleteMessage(m));meta.appendChild(del);}outer.appendChild(meta);frag.appendChild(outer);
+      }list.appendChild(frag);if(atEnd||!hasLoadedMessages)list.scrollTop=list.scrollHeight;else list.scrollTop=previousScroll;
+    }
+    function listenMessages(){if(listenerOn||!user)return;listenerOn=true;hasLoadedMessages=false;prevNewestKey='';messageQuery=chatRef.orderByChild('timestamp').limitToLast(160);
+      messageQuery.on('value',snap=>{const arr=[];snap.forEach(child=>arr.push({...child.val(),key:child.key}));const last=arr[arr.length-1];if(hasLoadedMessages&&last&&last.key!==prevNewestKey&&!isMine(last)&&unlocked&&document.visibilityState==='visible'&&'Notification'in window&&Notification.permission==='granted')new Notification('Math Study Notes',{body:'New update in your notes.'});prevNewestKey=last?last.key:'';lastMessages=arr;renderMessages();hasLoadedMessages=true;},err=>{notify('Cannot read chat: '+friendlyError(err));$('messagesList').textContent='Unable to load messages. Check Firebase Database Rules.';});
+    }
+    function stopMessageListeners(){if(messageQuery){messageQuery.off();messageQuery=null;}listenerOn=false;hasLoadedMessages=false;lastMessages=[];$('messagesList').replaceChildren();}
+    $('searchInput').addEventListener('input',renderMessages);
+    function selectReply(m){replyTo={text:msgSummary(m),key:m.key};$('replyLabel').textContent='Replying to: '+replyTo.text.slice(0,100);$('replyBox').classList.remove('hidden');$('messageInput').focus();}
+    function clearReply(){replyTo=null;$('replyBox').classList.add('hidden');}
+    $('closeReplyBtn').addEventListener('click',clearReply);
+    async function deleteMessage(m){if(!isMine(m)||!user)return;if(!confirm('Delete this message for both of you?'))return;try{await chatRef.child(m.key).remove();/* Files are intentionally not deleted automatically, to avoid breaking other references. */}catch(e){notify('Could not delete: '+friendlyError(e));}}
+    async function postMessage(payload){if(!user){notify('Sign in first.');return;}const m={sender:user.uid,timestamp:firebase.database.ServerValue.TIMESTAMP,...payload};if(replyTo){m.replyText=replyTo.text;m.replyKey=replyTo.key;}await chatRef.push(m);}
+    $('messageForm').addEventListener('submit',async e=>{e.preventDefault();const input=$('messageInput'),text=input.value.trim();if(!text)return;input.value='';const r=replyTo;clearReply();$('sendBtn').disabled=true;try{await postMessage({text,...(r?{replyText:r.text,replyKey:r.key}:{})});setTyping(false);}catch(err){input.value=text;notify('Message not sent: '+friendlyError(err));}finally{$('sendBtn').disabled=false;input.focus();}});
+    $('messageInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('messageForm').requestSubmit();}});
+    $('messageInput').addEventListener('input',()=>{if(user){setTyping(true);clearTimeout(typingTimer);typingTimer=setTimeout(()=>setTyping(false),1800);}});
+    $('emojiBtn').addEventListener('click',()=>$('emojiTray').classList.toggle('hidden'));
+    $('emojiTray').addEventListener('click',e=>{const v=e.target.closest('button')?.dataset.emoji;if(v){$('messageInput').value+=v;$('messageInput').focus();$('emojiTray').classList.add('hidden');}});
+
+    $('attachBtn').addEventListener('click',()=>$('fileInput').click());
+    $('fileInput').addEventListener('change',async e=>{const files=Array.from(e.target.files||[]);e.target.value='';if(!files.length)return;for(const file of files){if(!user){notify('Please sign in before sharing files.');break;}try{await uploadFile(file);}catch(err){notify('Upload failed: '+friendlyError(err));break;}}});
+    // Cloud Storage must be enabled and Firebase Storage Rules must allow the two approved accounts.
+    function uploadFile(file){return new Promise((resolve,reject)=>{
+      if(file.size>MAX_FILE_BYTES)return reject(Error('Files must be 100 MB or less.'));
+      if(!file.size)return reject(Error('Empty files cannot be sent.'));
+      if(uploadTask)return reject(Error('Another upload is in progress.'));
+      const permitted=/^(image|video|audio)\//.test(file.type)||/\.(pdf|docx?|xlsx?|pptx?|txt|csv|zip)$/i.test(file.name);
+      if(!permitted)return reject(Error('File type is not supported.'));
+      const safeName=file.name.replace(/[^\w.()-]/g,'_').slice(-90)||'attachment';
+      const path='couple-files/'+Date.now()+'_'+Math.random().toString(36).slice(2,10)+'_'+safeName;
+      const ref=storage.ref(path);const task=ref.put(file,{contentType:file.type||'application/octet-stream'});uploadTask=task;$('uploadProgress').classList.remove('hidden');$('uploadName').textContent='Uploading '+file.name.slice(0,24);$('uploadBar').value=0;
+      $('cancelUploadBtn').onclick=()=>task.cancel();
+      const done=()=>{uploadTask=null;$('uploadProgress').classList.add('hidden');};
+      task.on('state_changed',s=>{$('uploadBar').value=Math.round(100*s.bytesTransferred/s.totalBytes);},e=>{done();reject(e);},async()=>{try{const fileUrl=await task.snapshot.ref.getDownloadURL();await postMessage({fileUrl,fileName:file.name,type:file.type||'application/octet-stream',fileSize:file.size,storagePath:path});clearReply();done();resolve();}catch(e){done();reject(e);}});
+    });}
+
+    $('recordBtn').addEventListener('click',async()=>{if(recording){stopVoiceRecord();return;}if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){notify('Voice recording needs HTTPS and a compatible browser.');return;}try{cancelRecord=false;recStream=await navigator.mediaDevices.getUserMedia({audio:true});const mime=['audio/webm;codecs=opus','audio/mp4','audio/webm'].find(x=>MediaRecorder.isTypeSupported(x));const chunks=[];const rec=new MediaRecorder(recStream,mime?{mimeType:mime}:undefined);recording=rec;$('recordBtn').style.background='#6a3147';$('recordBtn').title='Stop voice recording';$('recordBtn').innerHTML='■';rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};rec.onstop=async()=>{recStream?.getTracks().forEach(t=>t.stop());recStream=null;recording=null;$('recordBtn').style.background='';$('recordBtn').title='Record voice note';$('recordBtn').innerHTML=ico('mic');if(cancelRecord||!chunks.length){cancelRecord=false;return;}const blob=new Blob(chunks,{type:rec.mimeType||'audio/webm'});const ext=blob.type.includes('mp4')?'m4a':'webm';try{await uploadFile(new File([blob],`Voice-note-${Date.now()}.${ext}`,{type:blob.type}));}catch(e){notify('Voice note not sent: '+friendlyError(e));}};rec.start();notify('Recording voice note. Tap the square button to send.');}catch(e){notify('Microphone unavailable: '+friendlyError(e));recStream?.getTracks().forEach(t=>t.stop());}});
+    function stopVoiceRecord(){if(recording&&recording.state!=='inactive')recording.stop();}
+
+    let presenceRef=null,otherPresenceRef=null,typingRef=null,otherTypingRef=null;
+    function setTyping(yes){if(typingRef&&user)typingRef.set({typing:yes,at:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{});}
+    function stopPresenceAndCalls(){if(otherPresenceRef)otherPresenceRef.off();if(otherTypingRef)otherTypingRef.off();if(callWatcherOn)callRef.off('value',handleCallChange);callWatcherOn=false;if(presenceRef){presenceRef.set({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{});presenceRef.onDisconnect().cancel();}if(typingRef)typingRef.remove().catch(()=>{});presenceRef=otherPresenceRef=typingRef=otherTypingRef=null;}
+    function listenStatusAndCalls(){if(!user||callWatcherOn)return;callWatcherOn=true;callRef.on('value',handleCallChange,e=>notify('Call connection unavailable: '+friendlyError(e)));
+      const myUID=user.uid;presenceRef=db.ref('presence/'+myUID);typingRef=db.ref('typing/'+myUID);
+      db.ref('.info/connected').on('value',onConnected);
+      function onConnected(snap){if(!user||user.uid!==myUID){db.ref('.info/connected').off('value',onConnected);return;}if(snap.val())presenceRef.onDisconnect().set({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP}).then(()=>presenceRef.set({online:true,lastSeen:firebase.database.ServerValue.TIMESTAMP})).catch(()=>{});}
+      db.ref('presence').on('value',onPresence,e=>notify('Presence unavailable: '+friendlyError(e)));
+      function onPresence(snap){if(!user||user.uid!==myUID){db.ref('presence').off('value',onPresence);return;}const others=Object.entries(snap.val()||{}).filter(([id])=>id!==myUID);const online=others.find(([,p])=>p.online);partnerUid=online?online[0]:(others[0]?others[0][0]:null);$('presenceDot').classList.toggle('online',!!online);$('partnerStatus').textContent=online?'Partner online':'Partner offline';}
+      db.ref('typing').on('value',onTyping);
+      function onTyping(snap){if(!user||user.uid!==myUID){db.ref('typing').off('value',onTyping);return;}const people=Object.entries(snap.val()||{}).filter(([id,t])=>id!==myUID&&t.typing&&Number(t.at)>Date.now()-5000);$('typingLine').textContent=people.length?'Partner is typing…':'';}
+      // Listeners created here are removed on sign-out using these retained callbacks.
+      presenceRootListener={connected:onConnected,presence:onPresence,typing:onTyping};
+    }
+    let presenceRootListener=null;
+    const oldStopPresence=stopPresenceAndCalls;
+    stopPresenceAndCalls=function(){if(presenceRootListener){db.ref('.info/connected').off('value',presenceRootListener.connected);db.ref('presence').off('value',presenceRootListener.presence);db.ref('typing').off('value',presenceRootListener.typing);presenceRootListener=null;}oldStopPresence();};
+    $('notifBtn').addEventListener('click',async()=>{if(!('Notification'in window)){notify('This browser does not support notifications.');return;}try{const result=await Notification.requestPermission();updateNotifButton();notify(result==='granted'?'Alerts enabled while the website is open.':'Notifications are not enabled.');}catch(e){notify(friendlyError(e));}});
+    function updateNotifButton(){if(!('Notification'in window)){$('notifBtn').disabled=true;return;}$('notifBtn').title=Notification.permission==='granted'?'Notifications enabled':'Enable notifications';}
+
+    // WebRTC one-to-one calls. Firebase Realtime Database carries ONLY signalling and ICE candidates,
+    // not camera or microphone media. A TURN server may be needed for restrictive networks.
+    function hideCallsUI(){$('callLayer').classList.add('hidden');$('activeCall').classList.add('hidden');$('incomingCall').classList.add('hidden');}
+    function showActiveCall(video){$('callLayer').classList.remove('hidden');$('activeCall').classList.remove('hidden');$('incomingCall').classList.add('hidden');$('videoStage').classList.remove('has-remote');$('localVideo').style.display=video?'block':'none';$('cameraBtn').style.display=video?'grid':'none';$('callHeading').textContent=video?'Video call':'Voice call';$('callDetail').textContent='Connecting...';$('callPlaceholder').textContent=video?'Waiting for your partner…':'Connecting audio…';}
+    function showIncomingCall(data){pendingIncoming=data;incomingShown=true;lastIncomingID=data.id;$('incomingCallText').textContent=(data.mode==='audio'?'Voice':'Video')+' call — answer to connect';$('callLayer').classList.remove('hidden');$('incomingCall').classList.remove('hidden');$('activeCall').classList.add('hidden');}
+    async function requestMedia(mode){if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw Error('Calls require an HTTPS website (or localhost).');return navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:mode==='video'?{facingMode:'user',width:{ideal:640},height:{ideal:480}}:false});}
+    function makePeer(id,mode,otherId){remoteCandidateQueue=[];remoteStream=new MediaStream();$('remoteVideo').srcObject=remoteStream;const pc=new RTCPeerConnection({iceServers:ICE_SERVERS});peer=pc;
+      pc.ontrack=e=>{if(e.streams?.[0]){$('remoteVideo').srcObject=e.streams[0];}else remoteStream.addTrack(e.track);$('videoStage').classList.add('has-remote');$('callDetail').textContent='Connected';$('remoteVideo').play().catch(()=>notify('Tap the video to enable sound.'));};
+      pc.onconnectionstatechange=()=>{if(peer!==pc)return;if(pc.connectionState==='connected'){$('callDetail').textContent='Connected';}else if(pc.connectionState==='failed'){$('callDetail').textContent='Connection failed — try again or configure TURN';notify('This network may need a TURN relay server.');}else if(pc.connectionState==='disconnected'){$('callDetail').textContent='Reconnecting...';}};
+      pc.onicecandidate=e=>{if(e.candidate&&user&&call?.id===id)db.ref('calls/ice/'+id+'/'+user.uid).push(e.candidate.toJSON()).catch(err=>console.warn('ICE write failed',err));};
+      localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));$('localVideo').srcObject=localStream;
+      if(otherId)watchRemoteIce(id,otherId);return pc;
+    }
+    function watchRemoteIce(callId,otherUID){if(iceListener){iceListener.off();iceListener=null;}iceListener=db.ref('calls/ice/'+callId+'/'+otherUID);iceListener.on('child_added',snap=>{const candidate=snap.val();if(!candidate||!peer)return;if(peer.remoteDescription){peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(e=>console.warn('ICE candidate error',e));}else remoteCandidateQueue.push(candidate);});}
+    async function flushRemoteIce(){while(peer?.remoteDescription&&remoteCandidateQueue.length){const c=remoteCandidateQueue.shift();try{await peer.addIceCandidate(new RTCIceCandidate(c));}catch(e){console.warn('Candidate rejected',e);}}}
+    async function startCall(mode){if(!user||!unlocked||callLock||call){return;}callLock=true;
+      try{const occupied=(await callRef.once('value')).val();if(occupied&&(occupied.status==='connected'||(occupied.status==='ringing'&&Date.now()-(occupied.createdAt||0)<120000))){notify('There is already a call in progress.');return;}
+        localStream=await requestMedia(mode);const id=db.ref('calls/ice').push().key;call={id,mode,caller:true,from:user.uid};showActiveCall(mode==='video');const pc=makePeer(id,mode,null);const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+        const result=await callRef.transaction(current=>{if(current&&(current.status==='connected'||(current.status==='ringing'&&Date.now()-(current.createdAt||0)<120000)))return;return{id,from:user.uid,mode,status:'ringing',createdAt:firebase.database.ServerValue.TIMESTAMP,offer:{type:offer.type,sdp:offer.sdp}};},undefined,false);
+        if(!result.committed){notify('The other call is already active.');await hangup(false);return;}callRef.onDisconnect().update({status:'ended'}).catch(()=>{});call.started=true;$('callDetail').textContent='Ringing…';
+      }catch(e){notify('Cannot start call: '+friendlyError(e));await hangup(false);}finally{callLock=false;}
+    }
+    $('remoteVideo').addEventListener('click',()=>{$('remoteVideo').play().catch(()=>{});});$('remoteVideo').controls=true;
+    $('voiceCallBtn').addEventListener('click',()=>startCall('audio'));$('videoCallBtn').addEventListener('click',()=>startCall('video'));
+    async function acceptCall(){const data=pendingIncoming;if(!data||!user||callLock)return;callLock=true;
+      try{localStream=await requestMedia(data.mode);call={id:data.id,mode:data.mode,caller:false,from:data.from,started:true};pendingIncoming=null;showActiveCall(data.mode==='video');const pc=makePeer(data.id,data.mode,data.from);await pc.setRemoteDescription(new RTCSessionDescription(data.offer));await flushRemoteIce();const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
+        const tx=await callRef.transaction(v=>v&&v.id===data.id&&v.status==='ringing'?{...v,status:'connected',answer:{type:answer.type,sdp:answer.sdp},answeredBy:user.uid}:undefined,undefined,false);
+        if(!tx.committed)throw Error('This call has already ended.');callRef.onDisconnect().update({status:'ended'}).catch(()=>{});$('callDetail').textContent='Connecting...';
+      }catch(e){notify('Cannot answer: '+friendlyError(e));await hangup(false);}finally{callLock=false;}
+    }
+    $('answerBtn').addEventListener('click',acceptCall);
+    $('declineBtn').addEventListener('click',async()=>{const id=pendingIncoming?.id;pendingIncoming=null;hideCallsUI();if(id)try{await callRef.transaction(v=>v&&v.id===id?{...v,status:'declined'}:undefined,undefined,false);}catch(e){notify(friendlyError(e));}});
+    async function handleCallChange(snap){const data=snap.val();if(!user)return;
+      if(!data||['ended','declined'].includes(data.status)){if(call&&(!data||call.id===data.id)){const wasDeclined=data?.status==='declined';await hangup(false);if(wasDeclined)notify('Call declined.');}if(pendingIncoming&&(!data||pendingIncoming.id===data.id)){pendingIncoming=null;hideCallsUI();}return;}
+      if(data.createdAt&&Date.now()-data.createdAt>120000&&data.status==='ringing'){return;}
+      if(call&&call.id===data.id){if(call.caller&&data.answer&&!call.remoteAnswerApplied&&peer){call.remoteAnswerApplied=true;try{await peer.setRemoteDescription(new RTCSessionDescription(data.answer));await flushRemoteIce();if(data.answeredBy)watchRemoteIce(data.id,data.answeredBy);$('callDetail').textContent='Connecting…';}catch(e){notify('Call handshake failed: '+friendlyError(e));await hangup();}}return;}
+      if(!call&&data.status==='ringing'&&data.from!==user.uid&&unlocked&&lastIncomingID!==data.id){showIncomingCall(data);}
+    }
+    function cleanupCall(){if(iceListener){iceListener.off();iceListener=null;}if(peer){try{peer.ontrack=null;peer.onicecandidate=null;peer.onconnectionstatechange=null;peer.close();}catch{}}peer=null;remoteCandidateQueue=[];if(localStream)localStream.getTracks().forEach(t=>t.stop());localStream=null;remoteStream=null;$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;call=null;pendingIncoming=null;hideCallsUI();}
+    async function hangup(updateRemote=true){const id=call?.id;cleanupCall();callRef.onDisconnect().cancel().catch(()=>{});if(updateRemote&&id){try{await callRef.transaction(v=>v&&v.id===id?{...v,status:'ended',endedAt:firebase.database.ServerValue.TIMESTAMP}:undefined,undefined,false);}catch(e){notify('Could not signal call end: '+friendlyError(e));}}}
+    $('hangupBtn').addEventListener('click',()=>hangup());
+    $('muteBtn').addEventListener('click',()=>{const t=localStream?.getAudioTracks()[0];if(!t)return;t.enabled=!t.enabled;$('muteBtn').classList.toggle('muted',!t.enabled);$('muteBtn').innerHTML=t.enabled?ico('mic'):ico('micOff');});
+    $('cameraBtn').addEventListener('click',()=>{const t=localStream?.getVideoTracks()[0];if(!t)return;t.enabled=!t.enabled;$('cameraBtn').classList.toggle('muted',!t.enabled);$('cameraBtn').innerHTML=t.enabled?ico('video'):ico('cameraOff');});
+    window.addEventListener('pagehide',()=>{if(localStream)localStream.getTracks().forEach(t=>t.stop());});
+  });
+  </script>
+</body>
+</html>
