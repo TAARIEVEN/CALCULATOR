@@ -142,9 +142,66 @@
     let user=null,unlocked=false,listenerOn=false,partnerUid=null,replyTo=null,uploadTask=null,recording=null,recStream=null,cancelRecord=false,typingTimer=null,lastMessages=[],hasLoadedMessages=false;
     let messageQuery=null,prevNewestKey='',call=null,pendingIncoming=null,lastIncomingID='',incomingShown=false,callWatcherOn=false,iceListener=null,remoteCandidateQueue=[];
     let localStream=null,peer=null,remoteStream=null,callLock=false;
-    const ICE_SERVERS=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
-    // For reliable mobile/cross-network calls, add a provider's TURN server here:
-    // ICE_SERVERS.push({urls:'turn:YOUR_TURN_SERVER:3478',username:'YOUR_USERNAME',credential:'YOUR_PASSWORD'});
+    // HTTPS Cloudflare Worker endpoint that returns short-lived TURN credentials.
+    // AFTER deploying the included turn-worker.js, paste the full Worker URL here, including /ice.
+    // NEVER insert your Cloudflare TURN key, API token or long-lived credentials into this public HTML.
+    const TURN_CREDENTIALS_ENDPOINT = '';
+    const STUN_SERVERS = [
+      {urls:'stun:stun.l.google.com:19302'},
+      {urls:'stun:stun1.l.google.com:19302'},
+      {urls:'stun:stun.cloudflare.com:3478'}
+    ];
+    let turnFetchInFlight = null;
+    let cachedIce = null;
+    async function getIceConfig(force=false) {
+      if (!TURN_CREDENTIALS_ENDPOINT || !/^https:\/\//i.test(TURN_CREDENTIALS_ENDPOINT)) {
+        return {iceServers: STUN_SERVERS, hasTurn:false, note:'TURN relay not configured. Calls on public Wi-Fi/mobile data may fail.'};
+      }
+      if (!force && cachedIce && Date.now() < cachedIce.expiresAt) return cachedIce;
+      if (!force && turnFetchInFlight) return turnFetchInFlight;
+      const load = (async () => {
+        const controller = new AbortController();
+        const deadline = setTimeout(() => controller.abort(), 10000);
+        try {
+          if (!user) throw Error('Please sign in to use TURN.');
+          const token = await user.getIdToken();
+          const response = await fetch(TURN_CREDENTIALS_ENDPOINT, {
+            method:'GET', headers:{Authorization:'Bearer '+token},
+            cache:'no-store', signal:controller.signal
+          });
+          if (!response.ok) throw Error('TURN credential service returned HTTP '+response.status);
+          const body = await response.json();
+          const received = Array.isArray(body.iceServers) ? body.iceServers : [];
+          const turn = received.filter(s => {
+            const urls = Array.isArray(s?.urls) ? s.urls : [s?.urls];
+            const hasRelayUrl = urls.some(url => typeof url === 'string' && /^turns?:/i.test(url));
+            return hasRelayUrl && typeof s.username === 'string' && typeof s.credential === 'string' && s.username && s.credential;
+          });
+          if (!turn.length) throw Error('No usable TURN relay credentials received.');
+          const result = {iceServers:[...STUN_SERVERS,...turn], hasTurn:true, note:'Direct and TURN relay paths available.',expiresAt:Date.now()+20*60*1000};
+          cachedIce=result;
+          return result;
+        } catch(err) {
+          console.warn('TURN unavailable — direct connection only:', err);
+          return {iceServers:STUN_SERVERS,hasTurn:false,note:'TURN unavailable ('+friendlyError(err)+'). Direct connection only.'};
+        } finally {clearTimeout(deadline);}
+      })();
+      turnFetchInFlight=load;
+      try{return await load;}finally{if(turnFetchInFlight===load)turnFetchInFlight=null;}
+    }
+    let reconnectTimer = null, reconnectWatchdog = null;
+    function clearReconnectTimer(){
+      if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
+      if(reconnectWatchdog){clearTimeout(reconnectWatchdog);reconnectWatchdog=null;}
+    }
+    function armReconnectWatchdog(){
+      if(reconnectWatchdog)clearTimeout(reconnectWatchdog);
+      reconnectWatchdog=setTimeout(()=>{
+        reconnectWatchdog=null;
+        if(call&&peer&&peer.connectionState!=='connected')scheduleReconnect('failed');
+      },16000);
+    }
+
     const MAX_FILE_BYTES=100*1024*1024;
 
     // Mathematical evaluator: only numbers, parentheses and operators; does not use eval().
@@ -425,18 +482,113 @@
     function showActiveCall(video){$('callLayer').classList.remove('hidden');$('activeCall').classList.remove('hidden');$('incomingCall').classList.add('hidden');$('videoStage').classList.remove('has-remote');$('localVideo').style.display=video?'block':'none';$('cameraBtn').style.display=video?'grid':'none';$('callHeading').textContent=video?'Video call':'Voice call';$('callDetail').textContent='Connecting...';$('callPlaceholder').textContent=video?'Waiting for your partner…':'Connecting audio…';}
     function showIncomingCall(data){pendingIncoming=data;incomingShown=true;lastIncomingID=data.id;$('incomingCallText').textContent=(data.mode==='audio'?'Voice':'Video')+' call — answer to connect';$('callLayer').classList.remove('hidden');$('incomingCall').classList.remove('hidden');$('activeCall').classList.add('hidden');}
     async function requestMedia(mode){if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw Error('Calls require an HTTPS website (or localhost).');return navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:mode==='video'?{facingMode:'user',width:{ideal:640},height:{ideal:480}}:false});}
-    function makePeer(id,mode,otherId){remoteCandidateQueue=[];remoteStream=new MediaStream();$('remoteVideo').srcObject=remoteStream;const pc=new RTCPeerConnection({iceServers:ICE_SERVERS});peer=pc;
-      pc.ontrack=e=>{if(e.streams?.[0]){$('remoteVideo').srcObject=e.streams[0];}else remoteStream.addTrack(e.track);$('videoStage').classList.add('has-remote');$('callDetail').textContent='Connected';$('remoteVideo').play().catch(()=>notify('Tap the video to enable sound.'));};
-      pc.onconnectionstatechange=()=>{if(peer!==pc)return;if(pc.connectionState==='connected'){$('callDetail').textContent='Connected';}else if(pc.connectionState==='failed'){$('callDetail').textContent='Connection failed — try again or configure TURN';notify('This network may need a TURN relay server.');}else if(pc.connectionState==='disconnected'){$('callDetail').textContent='Reconnecting...';}};
+    function makePeer(id,mode,otherId,iceConfig){
+      remoteCandidateQueue=[];remoteStream=new MediaStream();$('remoteVideo').srcObject=remoteStream;
+      const pc=new RTCPeerConnection({iceServers:iceConfig.iceServers,iceTransportPolicy:'all'});peer=pc;
+      if(call) call.turnReady=iceConfig.hasTurn;
+      pc.ontrack=e=>{if(e.streams?.[0]){$('remoteVideo').srcObject=e.streams[0];}else remoteStream.addTrack(e.track);$('videoStage').classList.add('has-remote');$('remoteVideo').play().catch(()=>notify('Tap the video to enable sound.'));};
+      pc.onconnectionstatechange=()=>{
+        if(peer!==pc)return;
+        if(pc.connectionState==='connected'){clearReconnectTimer();if(call){call.retries=0;}$('callDetail').textContent='Connected'+(call?.turnReady?' · TURN fallback ready':' · direct only');showActualCallRoute(pc);}
+        else if(pc.connectionState==='failed'||pc.connectionState==='disconnected'){
+          $('callDetail').textContent=pc.connectionState==='failed'?'Connection failed — recovering…':'Network changed — reconnecting…';
+          scheduleReconnect(pc.connectionState);
+        }
+      };
+      pc.oniceconnectionstatechange=()=>{
+        if(peer!==pc)return;
+        if(['failed','disconnected'].includes(pc.iceConnectionState))scheduleReconnect(pc.iceConnectionState);
+      };
       pc.onicecandidate=e=>{if(e.candidate&&user&&call?.id===id)db.ref('calls/ice/'+id+'/'+user.uid).push(e.candidate.toJSON()).catch(err=>console.warn('ICE write failed',err));};
       localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));$('localVideo').srcObject=localStream;
       if(otherId)watchRemoteIce(id,otherId);return pc;
+    }
+    // Display the route actually selected by ICE, if this browser exposes the stats.
+    async function showActualCallRoute(pc){
+      try{
+        const stats=await pc.getStats();
+        if(pc!==peer||pc.connectionState!=='connected')return;
+        let pair=null;
+        stats.forEach(x=>{if(x.type==='transport'&&x.selectedCandidatePairId) pair=stats.get(x.selectedCandidatePairId);});
+        if(!pair)stats.forEach(x=>{if(x.type==='candidate-pair'&&x.nominated&&x.state==='succeeded')pair=x;});
+        const local=pair&&stats.get(pair.localCandidateId);
+        const route=local?.candidateType==='relay'?'TURN relay':'direct';
+        if(local)$('callDetail').textContent='Connected · '+route;
+      }catch(e){console.debug('Route information unavailable',e);}
+    }
+    function scheduleReconnect(reason){
+      if(!call||!peer||reconnectTimer||peer.connectionState==='closed')return;
+      reconnectTimer=setTimeout(async()=>{
+        reconnectTimer=null;
+        if(!call||!peer||peer.connectionState==='connected'||['connected','completed'].includes(peer.iceConnectionState))return;
+        try{await requestIceRecovery();}catch(e){$('callDetail').textContent='Could not reconnect — hang up and call again';notify('Recovery failed: '+friendlyError(e));}
+      },reason==='failed'?900:4500);
+    }
+    async function requestIceRecovery(){
+      if(!call||!peer||!user)return;
+      if(call.retries>=3){$('callDetail').textContent='Could not reconnect. End the call and try again.';notify('Network blocks this call or TURN is unavailable.');return;}
+      if(call.recoveryBusy||Date.now()-(call.lastRecoveryAt||0)<8500)return;
+      call.retries=(call.retries||0)+1;call.lastRecoveryAt=Date.now();armReconnectWatchdog();
+      if(call.caller)await startIceRestart();
+      else {
+        call.recoveryBusy=true;
+        try{await callRef.child('restartRequest').set({id:call.id,at:Date.now(),from:user.uid});$('callDetail').textContent='Requesting connection recovery…';}
+        finally{if(call)call.recoveryBusy=false;}
+      }
+    }
+    async function startIceRestart(){
+      if(!peer||!call||!call.caller||call.recoveryBusy||peer.signalingState!=='stable')return;
+      const currentCall=call;const currentPeer=peer;currentCall.recoveryBusy=true;
+      try{
+        const config=await getIceConfig(true);
+        if(call!==currentCall||peer!==currentPeer)return;
+        currentPeer.setConfiguration({iceServers:config.iceServers,iceTransportPolicy:'all'});
+        currentCall.turnReady=config.hasTurn;
+        currentPeer.restartIce();
+        const offer=await currentPeer.createOffer({iceRestart:true});
+        await currentPeer.setLocalDescription(offer);
+        const restartId=Date.now()+'-'+user.uid.slice(0,5);
+        currentCall.lastRestartOfferId=restartId;
+        await callRef.child('reconnect').set({id:restartId,offer:{type:offer.type,sdp:offer.sdp}});
+        $('callDetail').textContent='Finding a new network route…';
+      }finally{if(call===currentCall)currentCall.recoveryBusy=false;}
+    }
+    async function applyRestartOffer(data){
+      const currentCall=call,currentPeer=peer;
+      if(!currentCall||!currentPeer||currentCall.caller||!data?.id||!data?.offer||currentCall.lastRestartOfferId===data.id)return;
+      currentCall.lastRestartOfferId=data.id;
+      try{
+        if(currentPeer.signalingState!=='stable')return;
+        const config=await getIceConfig(true);
+        if(call!==currentCall||peer!==currentPeer)return;
+        currentPeer.setConfiguration({iceServers:config.iceServers,iceTransportPolicy:'all'});
+        currentCall.turnReady=config.hasTurn;
+        await currentPeer.setRemoteDescription(new RTCSessionDescription(data.offer));
+        await flushRemoteIce();
+        const answer=await currentPeer.createAnswer();
+        await currentPeer.setLocalDescription(answer);
+        if(call!==currentCall)return;
+        await callRef.child('reconnect/answer').set({type:answer.type,sdp:answer.sdp});
+        $('callDetail').textContent='Reconnecting on available network…';
+      }catch(e){console.warn('ICE restart answer failed:',e);notify('Call recovery failed: '+friendlyError(e));}
+    }
+    async function applyRestartAnswer(data){
+      const currentCall=call,currentPeer=peer;
+      if(!currentCall||!currentPeer||!currentCall.caller||!data?.answer||currentCall.lastRestartAnswerId===data.id)return;
+      currentCall.lastRestartAnswerId=data.id;
+      try{
+        if(currentPeer.signalingState!=='have-local-offer')return;
+        await currentPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await flushRemoteIce();
+      }catch(e){console.warn('ICE restart answer rejected:',e);notify('Call recovery failed: '+friendlyError(e));}
     }
     function watchRemoteIce(callId,otherUID){if(iceListener){iceListener.off();iceListener=null;}iceListener=db.ref('calls/ice/'+callId+'/'+otherUID);iceListener.on('child_added',snap=>{const candidate=snap.val();if(!candidate||!peer)return;if(peer.remoteDescription){peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(e=>console.warn('ICE candidate error',e));}else remoteCandidateQueue.push(candidate);});}
     async function flushRemoteIce(){while(peer?.remoteDescription&&remoteCandidateQueue.length){const c=remoteCandidateQueue.shift();try{await peer.addIceCandidate(new RTCIceCandidate(c));}catch(e){console.warn('Candidate rejected',e);}}}
     async function startCall(mode){if(!user||!unlocked||callLock||call){return;}callLock=true;
       try{const occupied=(await callRef.once('value')).val();if(occupied&&(occupied.status==='connected'||(occupied.status==='ringing'&&Date.now()-(occupied.createdAt||0)<120000))){notify('There is already a call in progress.');return;}
-        localStream=await requestMedia(mode);const id=db.ref('calls/ice').push().key;call={id,mode,caller:true,from:user.uid};showActiveCall(mode==='video');const pc=makePeer(id,mode,null);const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+        const iceConfig=await getIceConfig();
+        if(!iceConfig.hasTurn) notify(iceConfig.note);
+        localStream=await requestMedia(mode);const id=db.ref('calls/ice').push().key;call={id,mode,caller:true,from:user.uid,retries:0};showActiveCall(mode==='video');const pc=makePeer(id,mode,null,iceConfig);const offer=await pc.createOffer();await pc.setLocalDescription(offer);
         const result=await callRef.transaction(current=>{if(current&&(current.status==='connected'||(current.status==='ringing'&&Date.now()-(current.createdAt||0)<120000)))return;return{id,from:user.uid,mode,status:'ringing',createdAt:firebase.database.ServerValue.TIMESTAMP,offer:{type:offer.type,sdp:offer.sdp}};},undefined,false);
         if(!result.committed){notify('The other call is already active.');await hangup(false);return;}callRef.onDisconnect().update({status:'ended'}).catch(()=>{});call.started=true;$('callDetail').textContent='Ringing…';
       }catch(e){notify('Cannot start call: '+friendlyError(e));await hangup(false);}finally{callLock=false;}
@@ -444,7 +596,9 @@
     $('remoteVideo').addEventListener('click',()=>{$('remoteVideo').play().catch(()=>{});});$('remoteVideo').controls=true;
     $('voiceCallBtn').addEventListener('click',()=>startCall('audio'));$('videoCallBtn').addEventListener('click',()=>startCall('video'));
     async function acceptCall(){const data=pendingIncoming;if(!data||!user||callLock)return;callLock=true;
-      try{localStream=await requestMedia(data.mode);call={id:data.id,mode:data.mode,caller:false,from:data.from,started:true};pendingIncoming=null;showActiveCall(data.mode==='video');const pc=makePeer(data.id,data.mode,data.from);await pc.setRemoteDescription(new RTCSessionDescription(data.offer));await flushRemoteIce();const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
+      try{const iceConfig=await getIceConfig();
+        if(!iceConfig.hasTurn)notify(iceConfig.note);
+        localStream=await requestMedia(data.mode);call={id:data.id,mode:data.mode,caller:false,from:data.from,started:true,retries:0};pendingIncoming=null;showActiveCall(data.mode==='video');const pc=makePeer(data.id,data.mode,data.from,iceConfig);await pc.setRemoteDescription(new RTCSessionDescription(data.offer));await flushRemoteIce();const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
         const tx=await callRef.transaction(v=>v&&v.id===data.id&&v.status==='ringing'?{...v,status:'connected',answer:{type:answer.type,sdp:answer.sdp},answeredBy:user.uid}:undefined,undefined,false);
         if(!tx.committed)throw Error('This call has already ended.');callRef.onDisconnect().update({status:'ended'}).catch(()=>{});$('callDetail').textContent='Connecting...';
       }catch(e){notify('Cannot answer: '+friendlyError(e));await hangup(false);}finally{callLock=false;}
@@ -454,14 +608,28 @@
     async function handleCallChange(snap){const data=snap.val();if(!user)return;
       if(!data||['ended','declined'].includes(data.status)){if(call&&(!data||call.id===data.id)){const wasDeclined=data?.status==='declined';await hangup(false);if(wasDeclined)notify('Call declined.');}if(pendingIncoming&&(!data||pendingIncoming.id===data.id)){pendingIncoming=null;hideCallsUI();}return;}
       if(data.createdAt&&Date.now()-data.createdAt>120000&&data.status==='ringing'){return;}
-      if(call&&call.id===data.id){if(call.caller&&data.answer&&!call.remoteAnswerApplied&&peer){call.remoteAnswerApplied=true;try{await peer.setRemoteDescription(new RTCSessionDescription(data.answer));await flushRemoteIce();if(data.answeredBy)watchRemoteIce(data.id,data.answeredBy);$('callDetail').textContent='Connecting…';}catch(e){notify('Call handshake failed: '+friendlyError(e));await hangup();}}return;}
+      if(call&&call.id===data.id){
+        if(call.caller&&data.answer&&!call.remoteAnswerApplied&&peer){
+          call.remoteAnswerApplied=true;
+          try{await peer.setRemoteDescription(new RTCSessionDescription(data.answer));await flushRemoteIce();if(data.answeredBy)watchRemoteIce(data.id,data.answeredBy);$('callDetail').textContent='Connecting…';}
+          catch(e){notify('Call handshake failed: '+friendlyError(e));await hangup();return;}
+        }
+        if(call?.caller&&data.restartRequest?.id===data.id&&data.restartRequest.from!==user.uid&&call.lastHandledRestartRequest!==data.restartRequest.at){
+          call.lastHandledRestartRequest=data.restartRequest.at;
+          startIceRestart().catch(e=>notify('ICE restart failed: '+friendlyError(e)));
+        }
+        if(call&&!call.caller&&data.reconnect?.offer)applyRestartOffer(data.reconnect);
+        if(call&&call.caller&&data.reconnect?.answer)applyRestartAnswer(data.reconnect);
+        return;
+      }
       if(!call&&data.status==='ringing'&&data.from!==user.uid&&unlocked&&lastIncomingID!==data.id){showIncomingCall(data);}
     }
-    function cleanupCall(){if(iceListener){iceListener.off();iceListener=null;}if(peer){try{peer.ontrack=null;peer.onicecandidate=null;peer.onconnectionstatechange=null;peer.close();}catch{}}peer=null;remoteCandidateQueue=[];if(localStream)localStream.getTracks().forEach(t=>t.stop());localStream=null;remoteStream=null;$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;call=null;pendingIncoming=null;hideCallsUI();}
+    function cleanupCall(){clearReconnectTimer();if(iceListener){iceListener.off();iceListener=null;}if(peer){try{peer.ontrack=null;peer.onicecandidate=null;peer.onconnectionstatechange=null;peer.oniceconnectionstatechange=null;peer.close();}catch{}}peer=null;remoteCandidateQueue=[];if(localStream)localStream.getTracks().forEach(t=>t.stop());localStream=null;remoteStream=null;$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;call=null;pendingIncoming=null;hideCallsUI();}
     async function hangup(updateRemote=true){const id=call?.id;cleanupCall();callRef.onDisconnect().cancel().catch(()=>{});if(updateRemote&&id){try{await callRef.transaction(v=>v&&v.id===id?{...v,status:'ended',endedAt:firebase.database.ServerValue.TIMESTAMP}:undefined,undefined,false);}catch(e){notify('Could not signal call end: '+friendlyError(e));}}}
     $('hangupBtn').addEventListener('click',()=>hangup());
     $('muteBtn').addEventListener('click',()=>{const t=localStream?.getAudioTracks()[0];if(!t)return;t.enabled=!t.enabled;$('muteBtn').classList.toggle('muted',!t.enabled);$('muteBtn').innerHTML=t.enabled?ico('mic'):ico('micOff');});
     $('cameraBtn').addEventListener('click',()=>{const t=localStream?.getVideoTracks()[0];if(!t)return;t.enabled=!t.enabled;$('cameraBtn').classList.toggle('muted',!t.enabled);$('cameraBtn').innerHTML=t.enabled?ico('video'):ico('cameraOff');});
+    window.addEventListener('online',()=>{if(call&&peer&&peer.connectionState!=='connected')scheduleReconnect('disconnected');});
     window.addEventListener('pagehide',()=>{if(localStream)localStream.getTracks().forEach(t=>t.stop());});
   });
   </script>
