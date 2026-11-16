@@ -145,7 +145,7 @@
     // HTTPS Cloudflare Worker endpoint that returns short-lived TURN credentials.
     // AFTER deploying the included turn-worker.js, paste the full Worker URL here, including /ice.
     // NEVER insert your Cloudflare TURN key, API token or long-lived credentials into this public HTML.
-    const TURN_CREDENTIALS_ENDPOINT = '';
+    const TURN_CREDENTIALS_ENDPOINT = 'https://secretchat-turn.dmkeven012.workers.dev/ice';
     const STUN_SERVERS = [
       {urls:'stun:stun.l.google.com:19302'},
       {urls:'stun:stun1.l.google.com:19302'},
