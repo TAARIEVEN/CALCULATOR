@@ -24,17 +24,17 @@
   </style>
 </head>
 <body>
-  <!-- DISGUISE: press and hold the title for 2 seconds to reveal the chat. -->
+  <!-- DISGUISE: hold calculator digit 3 for ~2 seconds to reveal the chat. -->
   <main id="notesMode" class="app-background">
     <div class="notes-wrap">
-      <header class="notes-top"><div id="titleTrigger" class="notes-logo" style="touch-action:manipulation;user-select:none;-webkit-user-select:none;cursor:pointer" title="Math Study Notes">
+      <header class="notes-top"><div class="notes-logo">
         <span class="logo-square"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5.5C6 4 9 4 12 6c3-2 6-2 9-.5V20c-3-1.5-6-1.5-9 .5-3-2-6-2-9-.5Z"/><path d="M12 6v14.5"/></svg></span><span><h1>Math Study Notes</h1><p class="notes-kicker">Calculus, Linear Algebra & Formulas</p></span>
-      </div><span class="version">v3.0</span></header>
+      </div><span class="version">v3.2</span></header>
       <section class="note-card"><h2>Quick Formula Evaluator</h2><div id="calcDisplay" class="calc-display">0</div><div class="calc-keys">
         <button class="calc-key clear" data-calc="C">C</button><button class="calc-key op" data-calc="(">(</button><button class="calc-key op" data-calc=")">)</button><button class="calc-key op" data-calc="/">÷</button>
         <button class="calc-key" data-calc="7">7</button><button class="calc-key" data-calc="8">8</button><button class="calc-key" data-calc="9">9</button><button class="calc-key op" data-calc="*">×</button>
         <button class="calc-key" data-calc="4">4</button><button class="calc-key" data-calc="5">5</button><button class="calc-key" data-calc="6">6</button><button class="calc-key op" data-calc="-">−</button>
-        <button class="calc-key" data-calc="1">1</button><button class="calc-key" data-calc="2">2</button><button class="calc-key" data-calc="3">3</button><button class="calc-key op" data-calc="+">+</button>
+        <button class="calc-key" data-calc="1">1</button><button class="calc-key" data-calc="2">2</button><button class="calc-key" data-calc="3" id="secretKey3" style="touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent">3</button><button class="calc-key op" data-calc="+">+</button>
         <button class="calc-key" data-calc="0" style="grid-column:span 2">0</button><button class="calc-key" data-calc=".">.</button><button class="calc-key equal" data-calc="=">=</button>
       </div><p class="hint-line">Enter an expression and press = to evaluate.</p></section>
       <article class="note-card"><h2>1. Derivative Rules & Identity Statements</h2><p>The derivative of a function measures the rate at which the function value changes with respect to a change in its input value.</p><div class="formula-box">Power Rule: d/dx (x^n) = n · x^(n−1)<br>Product Rule: d/dx (uv) = u'v + uv'<br>Quotient Rule: d/dx (u/v) = (u'v − uv') / v²<br>Chain Rule: d/dx [f(g(x))] = f'(g(x)) · g'(x)</div></article>
@@ -134,17 +134,120 @@
     let expression='0';
     function calcOutput(){ $('calcDisplay').textContent=expression.replaceAll('*','×').replaceAll('/','÷'); }
     function parseMath(source){const s=source.replace(/\s+/g,'');let i=0;function expr(){let n=term();while(s[i]=='+'||s[i]=='-'){const op=s[i++],v=term();n=op==='+'?n+v:n-v;}return n;}function term(){let n=factor();while(s[i]=='*'||s[i]=='/'){const op=s[i++],v=factor();n=op==='*'?n*v:n/v;}return n;}function factor(){if(s[i]==='+'||s[i]==='-'){const op=s[i++];return(op==='-'?-1:1)*factor();}if(s[i]==='('){i++;const v=expr();if(s[i++]!==')')throw Error('Missing )');return v;}const m=/^(?:\d+(?:\.\d*)?|\.\d+)/.exec(s.slice(i));if(!m)throw Error('Number expected');i+=m[0].length;return Number(m[0]);}const n=expr();if(i!==s.length||!Number.isFinite(n))throw Error('Invalid expression');return Math.round((n+Number.EPSILON)*1e10)/1e10;}
-    document.querySelectorAll('[data-calc]').forEach(b=>b.addEventListener('click',()=>{const value=b.dataset.calc;if(value==='C')expression='0';else if(value==='='){try{expression=String(parseMath(expression));}catch{expression='Error';}}else{if(expression==='Error'||(expression==='0'&&/[0-9(]/.test(value)))expression='';expression+=value;}calcOutput();}));
-    const titleTrigger=$('titleTrigger');let holdTimer=null;
-    function unlock(){if(unlocked)return;unlocked=true;clearTimeout(holdTimer);if(user)openChat();else openLogin();}
-    titleTrigger.addEventListener('pointerdown',e=>{if(e.button!==0)return;clearTimeout(holdTimer);holdTimer=setTimeout(unlock,1900);});
-    ['pointerup','pointercancel','pointerleave','contextmenu'].forEach(name=>titleTrigger.addEventListener(name,e=>{if(name==='contextmenu')e.preventDefault();clearTimeout(holdTimer);}));
+    // Regular calculator buttons still work normally (including a quick tap of 3).
+    function calculatorPress(value){
+      if(value==='C')expression='0';
+      else if(value==='='){
+        try{expression=String(parseMath(expression));}catch{expression='Error';}
+      }else{
+        if(expression==='Error'||(expression==='0'&&/[0-9(]/.test(value)))expression='';
+        expression+=value;
+      }
+      calcOutput();
+    }
+
+    const secretKey3=$('secretKey3');
+    let holdTimer=null;
+    let holdTouchId=null,holdStartX=0,holdStartY=0;
+    let holdCanceled=false,holdActivated=false;
+    let ignoreThreeClickUntil=0;
+
+    // A native long-press may produce a synthetic click on some browsers.
+    // Ignore that click so the digit 3 doesn't get typed after unlocking.
+    document.querySelectorAll('[data-calc]').forEach(b=>b.addEventListener('click',()=>{
+      if(b===secretKey3 && Date.now()<ignoreThreeClickUntil)return;
+      calculatorPress(b.dataset.calc);
+    }));
+
+    function stopHold(){clearTimeout(holdTimer);holdTimer=null;}
+    function unlock(){
+      if(unlocked)return;
+      unlocked=true;
+      stopHold();
+      holdActivated=true;
+      ignoreThreeClickUntil=Date.now()+1100;
+      if(user)openChat();else openLogin();
+    }
+    function beginHold(){
+      stopHold();holdActivated=false;holdCanceled=false;
+      holdTimer=setTimeout(()=>{holdTimer=null;unlock();},1900);
+    }
+
+    // Mobile: prevent text-selection/context-menu interruptions and handle
+    // short taps ourselves; browsers may suppress clicks after preventDefault().
+    secretKey3.addEventListener('touchstart',e=>{
+      if(e.touches.length!==1){stopHold();holdCanceled=true;holdTouchId=null;return;}
+      e.preventDefault();
+      const t=e.changedTouches[0];
+      holdTouchId=t.identifier;
+      holdStartX=t.clientX;holdStartY=t.clientY;
+      beginHold();
+    },{passive:false});
+    secretKey3.addEventListener('touchmove',e=>{
+      if(holdTouchId===null)return;
+      const t=Array.from(e.touches).find(x=>x.identifier===holdTouchId);
+      if(!t||Math.hypot(t.clientX-holdStartX,t.clientY-holdStartY)>18){
+        stopHold();holdCanceled=true;
+      }
+    },{passive:false});
+    secretKey3.addEventListener('touchend',e=>{
+      if(holdTouchId===null)return;
+      const ended=Array.from(e.changedTouches).some(x=>x.identifier===holdTouchId);
+      if(!ended)return;
+      e.preventDefault();
+      const normalTap=!holdActivated&&!holdCanceled;
+      stopHold();holdTouchId=null;
+      // Suppress any click synthesized by the browser, avoiding double input.
+      ignoreThreeClickUntil=Date.now()+650;
+      if(normalTap && !unlocked)calculatorPress('3');
+    },{passive:false});
+    secretKey3.addEventListener('touchcancel',()=>{
+      stopHold();holdTouchId=null;holdCanceled=true;
+      ignoreThreeClickUntil=Date.now()+650;
+    });
+
+    // Desktop / pen: allow ordinary clicks, but hold for 1.9 seconds to unlock.
+    secretKey3.addEventListener('pointerdown',e=>{
+      if(e.pointerType==='touch'||e.button!==0)return;
+      beginHold();
+    });
+    ['pointerup','pointercancel','pointerleave'].forEach(name=>
+      secretKey3.addEventListener(name,e=>{
+        if(e.pointerType!=='touch')stopHold();
+      })
+    );
+    window.addEventListener('pointerup',e=>{if(e.pointerType!=='touch')stopHold();});
+    secretKey3.addEventListener('contextmenu',e=>e.preventDefault());
+    secretKey3.addEventListener('dragstart',e=>e.preventDefault());
     function openLogin(){ $('notesMode').classList.add('hidden');$('authScreen').classList.remove('hidden');$('chatMode').classList.add('hidden');}
     function lockChat(){unlocked=false;hideCallsUI();$('notesMode').classList.remove('hidden');$('authScreen').classList.add('hidden');$('chatMode').classList.add('hidden');stopMessageListeners(); if(recording){cancelRecord=true;stopVoiceRecord();} if(call)hangup();}
     $('lockBtn').addEventListener('click',lockChat);$('authBack').addEventListener('click',lockChat);
     let lastPanicTap=0;document.querySelector('.chat-identity').addEventListener('touchend',e=>{const now=Date.now();if(now-lastPanicTap<340){e.preventDefault();lockChat();}lastPanicTap=now;});
     function openChat(){if(!user){openLogin();return;}$('notesMode').classList.add('hidden');$('authScreen').classList.add('hidden');$('chatMode').classList.remove('hidden');unlocked=true;listenMessages();listenStatusAndCalls();updateNotifButton();}
-    $('loginForm').addEventListener('submit',async(e)=>{e.preventDefault();$('authError').textContent='';$('loginBtn').disabled=true;try{await auth.signInWithEmailAndPassword($('emailInput').value.trim(),$('passwordInput').value);$('passwordInput').value='';}catch(err){$('authError').textContent=friendlyError(err);}finally{$('loginBtn').disabled=false;}});
+    // Report Firebase Auth error codes instead of hiding every failure behind "Error".
+    // Error codes help locate a Firebase Console setting without exposing passwords.
+    function describeLoginError(err){
+      const code=String(err?.code || 'unknown');
+      const common={
+        'auth/operation-not-allowed':'Email/Password sign-in is disabled. In Firebase: Authentication > Sign-in method > Email/Password > Enable.',
+        'auth/invalid-credential':'Email or password not recognized in this Firebase project. Verify Authentication > Users and the account password.',
+        'auth/invalid-login-credentials':'Email or password not recognized. Verify Authentication > Users in project secretchat-a5f36.',
+        'auth/wrong-password':'Incorrect password for this Firebase account.',
+        'auth/user-not-found':'This email is not listed in Firebase Authentication > Users for project secretchat-a5f36.',
+        'auth/invalid-email':'The email address is not valid.',
+        'auth/user-disabled':'This account has been disabled in Firebase Authentication.',
+        'auth/unauthorized-domain':'This domain is not authorized. Add taarieven.github.io under Authentication > Settings > Authorized domains.',
+        'auth/network-request-failed':'Firebase could not be reached. Check your internet, ad blocker, and firewall.',
+        'auth/too-many-requests':'Too many attempts. Try again later or reset the password safely.',
+        'auth/invalid-api-key':'Firebase API key rejected. Confirm the web app configuration for secretchat-a5f36.',
+        'auth/app-not-authorized':'App not authorized for the Firebase API key. Check API key restrictions and Firebase project configuration.',
+        'auth/internal-error':'Firebase reported an internal error. Check browser Developer Tools > Console and Network for more detail.'
+      };
+      const raw=String(err?.message||'').replace(/^Firebase:\s*/,'').slice(0,170);
+      console.error('SECRETCHAT Firebase sign-in error', {code, message:raw});
+      return (common[code] || (raw && raw.toLowerCase() !== 'error' ? raw : 'Sign-in failed. Check Firebase Authentication settings and browser Console.')) + ' ('+code+')';
+    }
+    $('loginForm').addEventListener('submit',async(e)=>{e.preventDefault();$('authError').textContent='';$('loginBtn').disabled=true;try{await auth.signInWithEmailAndPassword($('emailInput').value.trim(),$('passwordInput').value);$('passwordInput').value='';}catch(err){$('authError').textContent=describeLoginError(err);}finally{$('loginBtn').disabled=false;}});
     $('signOutBtn').addEventListener('click',async()=>{if(!confirm('Sign out of this device?'))return;try{if(presenceRef)await presenceRef.set({online:false,lastSeen:firebase.database.ServerValue.TIMESTAMP});if(call)await hangup();await auth.signOut();}catch(e){notify(friendlyError(e));}});
     auth.onAuthStateChanged(async(u)=>{
       const prev=user;user=u;
